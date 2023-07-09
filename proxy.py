@@ -58,6 +58,11 @@ class Proxy:
         if nome_arquivo in self.arquivos:
             conn.sendall(f"Arquivo {nome_arquivo} já foi depositado".encode('utf-8'))
             return
+
+        # Verificar se a tolerancia é 0
+        if tolerancia == 0:
+            conn.sendall(f"Tolerancia 0 não é aceita".encode('utf-8'))
+            return
         arquivo_bytes = self.receber_bytes(conn)
 
         # Verificar se é necessário criar mais servidores
