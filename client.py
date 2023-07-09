@@ -11,6 +11,7 @@ class Cliente:
         self.recover_folder = f"{os.path.abspath(os.getcwd())}/recover_files"
 
     def conectar_proxy(self):
+        self.proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.proxy_socket.connect((self.proxy_host, self.proxy_port))
 
     def desconectar_proxy(self):
@@ -27,6 +28,8 @@ class Cliente:
         nome_arquivo = input("Digite o nome do arquivo: ")
         tolerancia = input("Digite a tolerância: ")
 
+        self.conectar_proxy()
+
         requisicao = f"D#{nome_arquivo}#{tolerancia}"
         self.enviar_requisicao(requisicao.encode('utf-8'))
         resposta = self.receber_resposta()
@@ -38,9 +41,13 @@ class Cliente:
                 if not arquivo_bytes:
                     break
                 self.enviar_requisicao(arquivo_bytes)
+                resposta = self.receber_resposta()
         self.enviar_requisicao('\x00'.encode())
+
         resposta = self.receber_resposta()
         print(f"Proxy: {resposta.decode()}")
+
+        self.desconectar_proxy()
 
 
     def mudar_tolerancia(self):
@@ -56,24 +63,36 @@ class Cliente:
         if not os.path.exists(self.recover_folder):
             os.makedirs(self.recover_folder)
 
+        self.conectar_proxy()
+
         requisicao = f"L"
         self.enviar_requisicao(requisicao.encode('utf-8'))
         resposta = self.receber_resposta()
         print(f"Arquivos depositados pelo proxy: {resposta.decode()}")
 
+        self.desconectar_proxy()
+        self.conectar_proxy()
+
         nome_arquivo = input("Digite o nome do arquivo: ")
         requisicao = f"R#{nome_arquivo}"
         self.enviar_requisicao(requisicao.encode())
+        resposta = self.receber_resposta()
+        print(f"[PROXY] Request: {requisicao}; Resposta: {resposta.decode()}")
 
         with open(f"{self.recover_folder}/{nome_arquivo}", 'wb') as arquivo:
             while True:
                 resposta = self.receber_resposta()
-                if not resposta:
+                if not resposta or resposta.decode() == '\x00':
                     break
                 arquivo.write(resposta)
+                self.enviar_requisicao('Chunk recebido com sucesso'.encode())
+
+        self.enviar_requisicao('Recebimento do arquivo finalizado'.encode())
+        resposta = self.receber_resposta()
+        print(f"Proxy: {resposta.decode()}")
         print(f"Arquivo '{nome_arquivo}' recuperado com sucesso")
-        # else:
-        #     print(f"Arquivo '{nome_arquivo}' não encontrado")
+
+        self.desconectar_proxy()
 
     def menu(self):
         while True:
@@ -100,6 +119,4 @@ if __name__ == '__main__':
     proxy_port = int(input("Digite a porta do proxy: "))
 
     cliente = Cliente(proxy_host, proxy_port)
-    cliente.conectar_proxy()
     cliente.menu()
-    cliente.desconectar_proxy()

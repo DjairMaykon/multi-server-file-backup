@@ -27,6 +27,7 @@ class Server:
                 if not arquivo_bytes or arquivo_bytes.decode() == '\x00':
                     break
                 file.write(arquivo_bytes)
+                conn.sendall('Chunk recebido com sucesso'.encode())
 
         conn.sendall('Deposito finalizado com sucesso'.encode())
         print(f"[SERVER {self.server_id}] Finalizando deposito do arquivo {nome_arquivo}")
@@ -52,9 +53,10 @@ class Server:
                     if not arquivo_bytes:
                         break
                     conn.sendall(arquivo_bytes)
+                    resposta = conn.recv(1024)
             conn.sendall('\x00'.encode())
+            resposta = conn.recv(1024)
 
-            conn.sendall('Recuperação finalizada com sucesso'.encode())
             print(f"[SERVER {self.server_id}] Arquivo '{nome_arquivo}' recuperado")
         else:
             conn.sendall('Arquivo não está no servidor.'.encode())
@@ -77,7 +79,7 @@ class Server:
             print(f"[SERVER {self.server_id}] Request: {data}")
 
             # Separe o tipo de requisição e os dados adicionais
-            tipo, nome_arquivo = data.split('#', 1)[0]
+            tipo, nome_arquivo = data.split('#', 1)
 
             # Lidar com a requisição do cliente
             if tipo == 'D':  # Depositar arquivo

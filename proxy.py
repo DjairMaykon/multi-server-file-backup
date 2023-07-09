@@ -17,6 +17,21 @@ class Proxy:
         self.servers = {}  # Dicionário para armazenar informações dos servidores
         self.arquivos = {}  # Dicionário para armazenar a localização dos arquivos
 
+    def receber_bytes(self, conn, chunk=1024):
+        conn.sendall(str.encode('Iniciando recebimento dos bytes'))
+        print(f"[PROXY] Iniciando recebimento dos bytes")
+        arquivo_bytes = b''
+        while True:
+            received_data = conn.recv(chunk)
+            if not received_data or received_data.decode() == '\x00':
+                break
+            arquivo_bytes += received_data
+            conn.sendall(str.encode('Chunk recebido com sucesso'))
+        print(f"[PROXY] Finalizando recebimento dos bytes")
+        conn.sendall(str.encode('Recebimento dos bytes finalizado'))
+
+        return arquivo_bytes
+
     def start_server(self, num_servers):
         for i in range(num_servers):
             server = Server(len(self.servers) + 1)
@@ -38,13 +53,12 @@ class Proxy:
         resposta = self._server_socket.recv(1024)
         return resposta
 
-    def handle_depositar(self, conn, nome_arquivo, arquivo_bytes, tolerancia):
+    def handle_depositar(self, conn, nome_arquivo, tolerancia):
         # Verificar se o arquivo existe no proxy
         if nome_arquivo in self.arquivos:
             conn.sendall(f"Arquivo {nome_arquivo} já foi depositado".encode('utf-8'))
             return
-
-        arquivo_bytes = self.receber_arquivo(conn)
+        arquivo_bytes = self.receber_bytes(conn)
 
         # Verificar se é necessário criar mais servidores
         num_servers = len(self.servers)
@@ -60,7 +74,7 @@ class Proxy:
             self.connect_server(server_id)
 
             request = f"D#{nome_arquivo}"
-            self.send_request_server(request.encode('utf-8'))
+            self.send_request_server(request.encode())
             print(f"[PROXY] Request servidor {server_id}: {request}")
             resposta = self.receive_response_server()
             print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
@@ -71,6 +85,11 @@ class Proxy:
                 chunk = arquivo_bytes[start_index:end_index]
                 self.send_request_server(chunk)
                 start_index = end_index
+                resposta = self.receive_response_server()
+            self.send_request_server('\x00'.encode())
+
+            resposta = self.receive_response_server()
+            print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
 
             self.desconnect_server()
 
@@ -153,14 +172,31 @@ class Proxy:
         # Recuperar o arquivo de servidor aleatorio
         server_id = random.choice(self.arquivos[nome_arquivo])
         self.connect_server(server_id)
-        self.send_request_server(f"R#{nome_arquivo}".encode('utf-8'))
+
+        request = f"R#{nome_arquivo}"
+        self.send_request_server(request.encode('utf-8'))
+        print(f"[PROXY] Request servidor {server_id}: {request}")
         resposta = self.receive_response_server()
         print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
+
+        conn.sendall(str.encode(f'Iniciando recuperação do arquivo {nome_arquivo}'))
+        print(f"[PROXY] Iniciando recuperação do arquivo {nome_arquivo}")
+
         while True:
             received_data = self.receive_response_server()
-            if not received_data:
+            if not received_data or received_data.decode() == '\x00':
                 break
+
             conn.sendall(received_data)
+            resposta = conn.recv(1024)
+
+            self.send_request_server('Chunk recebido com sucesso'.encode('utf-8'))
+        conn.sendall('\x00'.encode())
+        resposta = conn.recv(1024)
+
+        self.send_request_server('Arquivo recebido com sucesso'.encode())
+        print(f"[PROXY] Finalizando recuperação do arquivo {nome_arquivo}")
+
         self.desconnect_server()
 
         # Enviar uma resposta de sucesso ao cliente
@@ -172,19 +208,6 @@ class Proxy:
         response = ", ".join(self.arquivos.keys())
         conn.sendall(response.encode('utf-8'))
 
-    def receber_arquivo(self, conn):
-        conn.sendall(str.encode('Iniciando recebimento do arquivo'))
-        print(f"[PROXY] Iniciando recebimento do arquivo")
-        arquivo_bytes = b''
-        while True:
-            received_data = conn.recv(1024)
-            if not received_data or received_data.decode() == '\x00':
-                break
-            arquivo_bytes += received_data
-        print(f"[PROXY] Finalizando recebimento do arquivo")
-        conn.sendall(str.encode('Recebimento do arquivo finalizado'))
-
-        return arquivo_bytes
     def start(self):
         self._socket.listen(1)
         print(f"[PROXY] Proxy ouvindo em {self.host}:{self.port}")
@@ -207,12 +230,12 @@ class Proxy:
             # Lide com a requisição do cliente
             if tipo == 'D':  # Depositar arquivo
                 _, arquivo_nome, tolerancia = data.split('#')
-                    self.handle_depositar(client_conn, arquivo_nome, arquivo_bytes, int(tolerancia))
+                self.handle_depositar(client_conn, arquivo_nome, int(tolerancia))
             elif tipo == 'M':  # Mudar tolerância
                 _, arquivo_nome, nova_tolerancia = data.split('#')
                 self.handle_mudar_tolerancia(client_conn, arquivo_nome, int(nova_tolerancia))
             elif tipo == 'R':  # Recuperar arquivo
-                _, arquivo_nome = data
+                _, arquivo_nome = data.split('#')
                 self.handle_recuperar(client_conn, arquivo_nome)
             elif tipo == 'L':  # Listar arquivos
                 self.handle_listar(client_conn)
