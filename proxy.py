@@ -177,6 +177,9 @@ class Proxy:
                 # Adicionar servidor à lista de servidores do arquivo
                 self.arquivos[nome_arquivo].append(server_id)
 
+        if (len(self.arquivos[nome_arquivo]) == 0):
+            del self.arquivos[nome_arquivo]
+
         # Enviar uma resposta de sucesso ao cliente
         response = "Tolerância alterada com sucesso"
         conn.sendall(response.encode('utf-8'))
