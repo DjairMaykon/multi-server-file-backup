@@ -51,13 +51,25 @@ class Cliente:
 
 
     def mudar_tolerancia(self):
+        self.conectar_proxy()
+
+        requisicao = f"L"
+        self.enviar_requisicao(requisicao.encode('utf-8'))
+        resposta = self.receber_resposta()
+        print(f"Arquivos depositados pelo proxy e sua tolerancia: {resposta.decode()}")
+
+        self.desconectar_proxy()
+        self.conectar_proxy()
+
         nome_arquivo = input("Digite o nome do arquivo: ")
         nova_tolerancia = input("Digite a nova tolerância: ")
         requisicao = f"M#{nome_arquivo}#{nova_tolerancia}"
         self.enviar_requisicao(requisicao.encode('utf-8'))
 
         resposta = self.receber_resposta()
-        print(resposta)
+        print(f"[PROXY] Request: {requisicao}; Resposta: {resposta.decode()}")
+
+        self.desconectar_proxy()
 
     def recuperar_arquivo(self):
         if not os.path.exists(self.recover_folder):
@@ -68,7 +80,7 @@ class Cliente:
         requisicao = f"L"
         self.enviar_requisicao(requisicao.encode('utf-8'))
         resposta = self.receber_resposta()
-        print(f"Arquivos depositados pelo proxy: {resposta.decode()}")
+        print(f"Arquivos depositados pelo proxy e sua tolerancia: {resposta.decode()}")
 
         self.desconectar_proxy()
         self.conectar_proxy()

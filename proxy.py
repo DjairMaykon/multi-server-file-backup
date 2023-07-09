@@ -128,35 +128,54 @@ class Proxy:
                 self.arquivos[nome_arquivo].remove(server_id)
         elif nova_tolerancia > len(servidores_arquivo):
             arquivo_bytes = b''
-            arquivo_server_id = self.arquivos[nome_arquivo][0]
-            self.connect_server(arquivo_server_id)
-            self.send_request_server(f"R#{nome_arquivo}".encode('utf-8'))
+            server_id = random.choice(self.arquivos[nome_arquivo])
+            self.connect_server(server_id)
+
+            request = f"R#{nome_arquivo}"
+            self.send_request_server(request.encode('utf-8'))
+            print(f"[PROXY] Request servidor {server_id}: {request}")
             resposta = self.receive_response_server()
-            print(f"[PROXY] Resposta servidor {arquivo_server_id}: {resposta}")
+            print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
+
             while True:
                 received_data = self.receive_response_server()
-                if not received_data:
+                if not received_data or received_data.decode() == '\x00':
                     break
                 arquivo_bytes += received_data
+                self.send_request_server('Chunk recebido com sucesso'.encode('utf-8'))
+            print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
+            self.send_request_server('Arquivo recebido com sucesso'.encode())
+
             self.desconnect_server()
+
             # Adicionar arquivos em servidores disponíveis
-            servidores_disponiveis = set(server_ids) - servidores_arquivo
+            servidores_disponiveis = list(set(server_ids) - set(servidores_arquivo))
             servidores_adicionar = random.sample(servidores_disponiveis, nova_tolerancia - len(servidores_arquivo))
             for server_id in servidores_adicionar:
                 self.connect_server(server_id)
-                self.send_request_server(f"D#{nome_arquivo}".encode('utf-8'))
+
+                request = f"D#{nome_arquivo}"
+                self.send_request_server(request.encode())
+                print(f"[PROXY] Request servidor {server_id}: {request}")
                 resposta = self.receive_response_server()
                 print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
+
                 start_index = 0
                 while start_index < len(arquivo_bytes):
                     end_index = start_index + 1024
                     chunk = arquivo_bytes[start_index:end_index]
                     self.send_request_server(chunk)
                     start_index = end_index
+                    resposta = self.receive_response_server()
+                self.send_request_server('\x00'.encode())
+
+                resposta = self.receive_response_server()
+                print(f"[PROXY] Resposta servidor {server_id}: {resposta}")
+
                 self.desconnect_server()
 
                 # Adicionar servidor à lista de servidores do arquivo
-                self.arquivos[nome_arquivo].add(server_id)
+                self.arquivos[nome_arquivo].append(server_id)
 
         # Enviar uma resposta de sucesso ao cliente
         response = "Tolerância alterada com sucesso"
@@ -205,7 +224,7 @@ class Proxy:
 
     def handle_listar(self, conn):
         # Enviar uma resposta de sucesso ao cliente
-        response = ", ".join(self.arquivos.keys())
+        response = ', '.join([f"{nome_arquivo}: {len(servidores)} servidor(es)" for nome_arquivo, servidores in self.arquivos.items()])
         conn.sendall(response.encode('utf-8'))
 
     def start(self):
